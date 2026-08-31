@@ -28,6 +28,12 @@ class ThrottlingMiddleware(BaseMiddleware):
         if db_user.role in ["admin", "owner", "moderator"]:
             return await handler(event, data)
 
+        state = data.get("state")
+        if isinstance(event, Message) and (
+            event.media_group_id or (state is not None and await state.get_state())
+        ):
+            return await handler(event, data)
+
         user_id = tg_user.id
         current_time = time.time()
         
