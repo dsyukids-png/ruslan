@@ -39,7 +39,8 @@ def get_admin_menu_kb(role: str = "admin") -> InlineKeyboardMarkup:
         builder.adjust(2, 2, 1)
     return builder.as_markup()
 
-@router.message(F.text == "/admin")
+# Исправлено: используем regexp, чтобы команда /admin ловилась независимо от пробелов и регистра
+@router.message(F.text.regexp(r"^/admin\b"))
 async def cmd_admin(message: Message, db_user: User):
     if db_user.role not in STAFF_ROLES:
         await message.answer(f"{Emojis.ERROR} У вас нет доступа к этой команде.")
