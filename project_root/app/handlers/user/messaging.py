@@ -56,13 +56,14 @@ async def process_anonymous_message(
         if not photos:
             return
 
+        # Передаем file_id наиболее качественной фотографии из сообщения в общую очередь альбома
         await queue_anonymous_media_group(
             session=session,
             sender=db_user,
             recipient=recipient,
             first_message=message,
             media_group_id=media_group_id,
-            file_ids=[photo.file_id for photo in photos],
+            file_ids=[photos[-1].file_id],
             caption=(message.caption or message.text or "").strip(),
             state=state,
         )
