@@ -47,11 +47,11 @@ async def get_last_ticket_for_user(session: AsyncSession, user_id: int) -> Suppo
     return result.scalar_one_or_none()
 
 
-MEDIA_GROUP_CACHE: dict[str, dict] = {}
+MEDIA_GROUP_CACHE: dict[tuple[int, str], dict] = {}
 
 
-async def _flush_ticket_media_group(bot, chat_id: int, media_group_id: str, caption: str | None):
-    group_data = MEDIA_GROUP_CACHE.pop(media_group_id, None)
+async def _flush_ticket_media_group(bot, chat_id: int, media_group_id: str):
+    group_data = MEDIA_GROUP_CACHE.pop((chat_id, media_group_id), None)
     if not group_data:
         return
 
@@ -60,7 +60,7 @@ async def _flush_ticket_media_group(bot, chat_id: int, media_group_id: str, capt
         media.append(
             InputMediaPhoto(
                 media=item["file_id"],
-                caption=caption if idx == 0 and caption else None,
+                caption=group_data.get("caption") if idx == 0 else None,
                 parse_mode="HTML",
             )
         )
@@ -68,20 +68,25 @@ async def _flush_ticket_media_group(bot, chat_id: int, media_group_id: str, capt
         await bot.send_media_group(chat_id=chat_id, media=media)
 
 
-async def _schedule_ticket_media_group_flush(bot, chat_id: int, media_group_id: str, caption: str | None):
+async def _schedule_ticket_media_group_flush(bot, chat_id: int, media_group_id: str):
     await asyncio.sleep(0.8)
-    await _flush_ticket_media_group(bot, chat_id, media_group_id, caption)
+    await _flush_ticket_media_group(bot, chat_id, media_group_id)
 
 
 async def send_ticket_media_group(bot, chat_id: int, message: Message, caption: str):
     photos = getattr(message, "photo", None) or []
     group_id = getattr(message, "media_group_id", None)
     if group_id:
-        group_data = MEDIA_GROUP_CACHE.setdefault(group_id, {"chat_id": chat_id, "items": []})
-        group_data["items"].append({"file_id": photos[-1].file_id})
+        key = (chat_id, group_id)
+        group_data = MEDIA_GROUP_CACHE.setdefault(key, {"items": [], "caption": None})
+        file_id = photos[-1].file_id
+        if file_id not in {item["file_id"] for item in group_data["items"]}:
+            group_data["items"].append({"file_id": file_id})
+        if caption and not group_data["caption"]:
+            group_data["caption"] = caption.strip()
         if not group_data.get("scheduled"):
             group_data["scheduled"] = True
-            asyncio.create_task(_schedule_ticket_media_group_flush(bot, chat_id, group_id, caption if caption and caption.strip() else None))
+            asyncio.create_task(_schedule_ticket_media_group_flush(bot, chat_id, group_id))
         return True
 
     if photos:
