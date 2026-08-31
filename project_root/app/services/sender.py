@@ -162,7 +162,8 @@ async def send_anonymous_message(
 
         if media_group_file_ids:
             media = []
-            for index, file_id in enumerate(_dedupe_file_ids(media_group_file_ids)):
+            deduped_ids = _dedupe_file_ids(media_group_file_ids)
+            for index, file_id in enumerate(deduped_ids):
                 media.append(
                     InputMediaPhoto(
                         media=file_id,
@@ -172,6 +173,11 @@ async def send_anonymous_message(
                 )
             if media:
                 await original_message.bot.send_media_group(chat_id=recipient.telegram_id, media=media)
+                await original_message.bot.send_message(
+                    chat_id=recipient.telegram_id,
+                    text="⬇️ <b>Действия с альбомом:</b>",
+                    reply_markup=reply_markup,
+                )
                 return True
 
         photos = getattr(original_message, "photo", None) or []
