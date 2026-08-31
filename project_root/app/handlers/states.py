@@ -11,3 +11,4 @@ class SupportState(StatesGroup):
 
 class AdminState(StatesGroup):
     waiting_for_user_id = State()        # Ожидание Telegram ID для управления доступом
+    waiting_for_access_confirmation = State()  # Ожидание подтверждения действия
