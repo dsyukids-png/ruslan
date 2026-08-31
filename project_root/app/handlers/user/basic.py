@@ -56,5 +56,5 @@ async def cmd_start(
     # Если обычный старт без параметров - показываем главное меню
     await message.answer(
         Texts.WELCOME + "\n\n" + Texts.MAIN_MENU,
-        reply_markup=get_main_menu_kb()
+        reply_markup=get_main_menu_kb(db_user.role)
     )
