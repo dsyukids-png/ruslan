@@ -180,7 +180,7 @@ async def process_access_user_id(
         await session.flush()
 
     await state.update_data(target_user_id=target.id, target_telegram_id=telegram_id)
-    await state.set_state(AdminState.waiting_for_user_id)
+    await state.set_state(AdminState.waiting_for_access_confirmation)
     await message.answer(
         f"{Emojis.WARN} Подтвердить действие <b>{action}</b> для пользователя "
         f"<code>{telegram_id}</code>?",
