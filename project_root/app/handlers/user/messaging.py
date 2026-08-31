@@ -39,7 +39,7 @@ async def process_anonymous_message(
 
     if not recipient_id:
         await state.clear()
-        await message.answer(Texts.ERR_USER_NOT_FOUND, reply_markup=get_main_menu_kb())
+        await message.answer(Texts.ERR_USER_NOT_FOUND, reply_markup=get_main_menu_kb(db_user.role))
         return
 
     result = await session.execute(select(User).where(User.id == recipient_id))
@@ -47,7 +47,7 @@ async def process_anonymous_message(
 
     if not recipient:
         await state.clear()
-        await message.answer(Texts.ERR_USER_NOT_FOUND, reply_markup=get_main_menu_kb())
+        await message.answer(Texts.ERR_USER_NOT_FOUND, reply_markup=get_main_menu_kb(db_user.role))
         return
 
     media_group_id = getattr(message, "media_group_id", None)
@@ -56,8 +56,7 @@ async def process_anonymous_message(
         if not photos:
             return
 
-        # Передаем file_id наиболее качественной фотографии из сообщения в общую очередь альбома
-        await queue_anonymous_media_group(
+        is_first_group_message = await queue_anonymous_media_group(
             session=session,
             sender=db_user,
             recipient=recipient,
@@ -67,6 +66,8 @@ async def process_anonymous_message(
             caption=(message.caption or message.text or "").strip(),
             state=state,
         )
+        if is_first_group_message:
+            await message.answer(Texts.MESSAGE_SENT_SUCCESS, reply_markup=get_main_menu_kb(db_user.role))
         return
 
     success = await send_anonymous_message(
@@ -77,11 +78,11 @@ async def process_anonymous_message(
     )
 
     if success:
-        await message.answer(Texts.MESSAGE_SENT_SUCCESS, reply_markup=get_main_menu_kb())
+        await message.answer(Texts.MESSAGE_SENT_SUCCESS, reply_markup=get_main_menu_kb(db_user.role))
     else:
         await message.answer(
             "Не удалось отправить сообщение. Возможно, получатель заблокировал бота.",
-            reply_markup=get_main_menu_kb(),
+            reply_markup=get_main_menu_kb(db_user.role),
         )
 
     await state.clear()
