@@ -1,6 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from app.texts.emojis import Emojis
-from app.keyboards.callbacks import MenuCB
+from app.keyboards.callbacks import AdminCB, MenuCB
 
 
 def make_button(text: str, callback_data: str | None = None, url: str | None = None, icon_id: str | None = None) -> InlineKeyboardButton:
@@ -12,42 +12,51 @@ def make_button(text: str, callback_data: str | None = None, url: str | None = N
     )
 
 
-def get_main_menu_kb() -> InlineKeyboardMarkup:
+def get_main_menu_kb(role: str = "user") -> InlineKeyboardMarkup:
     """Главное меню бота."""
+    rows = [
+        [
+            make_button(
+                text="Моя ссылка",
+                callback_data=MenuCB(action="link").pack(),
+                icon_id=Emojis.LINK.custom_id,
+            ),
+            make_button(
+                text="Мои сообщения",
+                callback_data=MenuCB(action="inbox").pack(),
+                icon_id=Emojis.INBOX.custom_id,
+            ),
+        ],
+        [
+            make_button(
+                text="Настройки",
+                callback_data=MenuCB(action="settings").pack(),
+                icon_id=Emojis.SETTINGS.custom_id,
+            ),
+            make_button(
+                text="Поддержка",
+                callback_data=MenuCB(action="support").pack(),
+                icon_id=Emojis.SUPPORT.custom_id,
+            ),
+        ],
+        [
+            make_button(
+                text="Помощь",
+                callback_data=MenuCB(action="help").pack(),
+                icon_id=Emojis.HELP.custom_id,
+            )
+        ],
+    ]
+    if role in {"admin", "owner", "moderator"}:
+        rows.append([
+            make_button(
+                text="Админ-панель",
+                callback_data=AdminCB(action="main").pack(),
+                icon_id=Emojis.ADMIN.custom_id,
+            )
+        ])
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                make_button(
-                    text="Моя ссылка",
-                    callback_data=MenuCB(action="link").pack(),
-                    icon_id=Emojis.LINK.custom_id,
-                ),
-                make_button(
-                    text="Мои сообщения",
-                    callback_data=MenuCB(action="inbox").pack(),
-                    icon_id=Emojis.INBOX.custom_id,
-                ),
-            ],
-            [
-                make_button(
-                    text="Настройки",
-                    callback_data=MenuCB(action="settings").pack(),
-                    icon_id=Emojis.SETTINGS.custom_id,
-                ),
-                make_button(
-                    text="Поддержка",
-                    callback_data=MenuCB(action="support").pack(),
-                    icon_id=Emojis.SUPPORT.custom_id,
-                ),
-            ],
-            [
-                make_button(
-                    text="Помощь",
-                    callback_data=MenuCB(action="help").pack(),
-                    icon_id=Emojis.HELP.custom_id,
-                )
-            ],
-        ]
+        inline_keyboard=rows
     )
 
 
