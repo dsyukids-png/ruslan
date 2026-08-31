@@ -36,7 +36,7 @@ async def queue_anonymous_media_group(
     file_ids: list[str],
     caption: str,
     state: Any | None = None,
-) -> None:
+) -> bool:
     key = (sender.id, recipient.id, media_group_id)
     deduped = _dedupe_file_ids(file_ids)
 
@@ -58,10 +58,11 @@ async def queue_anonymous_media_group(
                 group["file_ids"].append(file_id)
 
         if key in MEDIA_GROUP_TASKS:
-            return
+            return False
 
         task = asyncio.create_task(_flush_media_group_after_delay(key))
         MEDIA_GROUP_TASKS[key] = task
+        return True
 
 
 async def _flush_media_group_after_delay(key: tuple[int, int, str]) -> None:
@@ -162,8 +163,7 @@ async def send_anonymous_message(
 
         if media_group_file_ids:
             media = []
-            deduped_ids = _dedupe_file_ids(media_group_file_ids)
-            for index, file_id in enumerate(deduped_ids):
+            for index, file_id in enumerate(_dedupe_file_ids(media_group_file_ids)):
                 media.append(
                     InputMediaPhoto(
                         media=file_id,
@@ -173,11 +173,6 @@ async def send_anonymous_message(
                 )
             if media:
                 await original_message.bot.send_media_group(chat_id=recipient.telegram_id, media=media)
-                await original_message.bot.send_message(
-                    chat_id=recipient.telegram_id,
-                    text="⬇️ <b>Действия с альбомом:</b>",
-                    reply_markup=reply_markup,
-                )
                 return True
 
         photos = getattr(original_message, "photo", None) or []
