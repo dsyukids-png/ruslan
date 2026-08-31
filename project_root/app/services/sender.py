@@ -67,7 +67,7 @@ async def queue_anonymous_media_group(
 
 async def _flush_media_group_after_delay(key: tuple[int, int, str]) -> None:
     try:
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(2.0)
     finally:
         async with MEDIA_GROUP_LOCK:
             payload = MEDIA_GROUP_CACHE.pop(key, None)
