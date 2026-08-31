@@ -1,4 +1,5 @@
 from aiogram import Router, F, Bot
+from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
@@ -8,6 +9,7 @@ from app.database.models import User, Message as DBMessage, SupportTicket, Log, 
 from app.keyboards.callbacks import MenuCB, AdminCB, SupportCB
 from app.texts.emojis import Emojis
 from app.texts.templates import Texts
+from app.keyboards.inline import get_main_menu_kb
 from app.handlers.states import AdminState
 from app.config import config
 from app.services.crypto import generate_personal_token
@@ -38,26 +40,20 @@ def get_admin_menu_kb(role: str = "admin") -> InlineKeyboardMarkup:
         builder.adjust(2, 2, 1)
     return builder.as_markup()
 
-# 1. Надежный перехват команды /admin (сработает даже при наличии пробелов/регистра)
-# 2. Также проверяем владельца по config.OWNER_ID на случай, если в базе роль еще не обновилась
-@router.message(F.text.regexp(r"^/admin\b"))
+@router.message(Command("admin"))
 async def cmd_admin(message: Message, db_user: User):
-    is_owner = message.from_user.id == config.OWNER_ID
-    if db_user.role not in STAFF_ROLES and not is_owner:
+    if db_user.role not in STAFF_ROLES:
         await message.answer(f"{Emojis.ERROR} У вас нет доступа к этой команде.")
         return
 
-    role = "owner" if is_owner else db_user.role
     await message.answer(
         f"{Emojis.ADMIN} <b>Админ-панель</b>\n\nВыберите нужный раздел:",
-        reply_markup=get_admin_menu_kb(role)
+        reply_markup=get_admin_menu_kb(db_user.role)
     )
 
-# Обработка нажатия на инлайн-кнопку «Админ-панель» из главного меню
 @router.callback_query(AdminCB.filter(F.action == "main"))
 async def cb_admin_home(query: CallbackQuery, db_user: User):
-    is_owner = query.from_user.id == config.OWNER_ID
-    if db_user.role not in STAFF_ROLES and not is_owner:
+    if db_user.role not in STAFF_ROLES:
         await query.answer("Доступ запрещен", show_alert=True)
         return
 
@@ -65,16 +61,14 @@ async def cb_admin_home(query: CallbackQuery, db_user: User):
     if not isinstance(message, Message):
         return
 
-    role = "owner" if is_owner else db_user.role
     await message.edit_text(
         text=f"{Emojis.ADMIN} <b>Админ-панель</b>\n\nВыберите нужный раздел:",
-        reply_markup=get_admin_menu_kb(role)
+        reply_markup=get_admin_menu_kb(db_user.role)
     )
 
 @router.callback_query(AdminCB.filter(F.action == "stats"))
 async def cb_admin_stats(query: CallbackQuery, session: AsyncSession, db_user: User):
-    is_owner = query.from_user.id == config.OWNER_ID
-    if db_user.role not in STAFF_ROLES and not is_owner:
+    if db_user.role not in STAFF_ROLES:
         return
 
     total_users = (await session.execute(select(func.count(User.id)))).scalar()
@@ -109,17 +103,31 @@ ACCESS_ACTIONS = {
     "ask_remove_admin": "remove_admin",
 }
 
+
 def get_access_confirmation_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="Да", callback_data=AdminCB(action="confirm_access").pack(), icon_custom_emoji_id=Emojis.SUCCESS.custom_id)
-    builder.button(text="Нет", callback_data=AdminCB(action="cancel_access").pack(), icon_custom_emoji_id=Emojis.ERROR.custom_id)
+    builder.button(
+        text="Да",
+        callback_data=AdminCB(action="confirm_access").pack(),
+        icon_custom_emoji_id=Emojis.SUCCESS.custom_id,
+    )
+    builder.button(
+        text="Нет",
+        callback_data=AdminCB(action="cancel_access").pack(),
+        icon_custom_emoji_id=Emojis.ERROR.custom_id,
+    )
     builder.adjust(2)
     return builder.as_markup()
 
+
 @router.callback_query(AdminCB.filter(F.action.in_(ACCESS_ACTIONS.keys())))
-async def cb_access_action(query: CallbackQuery, callback_data: AdminCB, state, db_user: User):
-    is_owner = query.from_user.id == config.OWNER_ID
-    if db_user.role not in FULL_ADMIN_ROLES and not is_owner:
+async def cb_access_action(
+    query: CallbackQuery,
+    callback_data: AdminCB,
+    state,
+    db_user: User,
+):
+    if db_user.role not in FULL_ADMIN_ROLES:
         await query.answer("Нужны права администратора", show_alert=True)
         return
 
@@ -128,12 +136,19 @@ async def cb_access_action(query: CallbackQuery, callback_data: AdminCB, state, 
     await state.set_state(AdminState.waiting_for_user_id)
     await query.answer()
     if isinstance(query.message, Message):
-        await query.message.answer(f"{Emojis.USER} Введи Telegram ID пользователя для действия <b>{action}</b>.")
+        await query.message.answer(
+            f"{Emojis.USER} Введи Telegram ID пользователя для действия <b>{action}</b>."
+        )
+
 
 @router.message(AdminState.waiting_for_user_id)
-async def process_access_user_id(message: Message, state, db_user: User, session: AsyncSession):
-    is_owner = message.from_user.id == config.OWNER_ID
-    if db_user.role not in FULL_ADMIN_ROLES and not is_owner:
+async def process_access_user_id(
+    message: Message,
+    state,
+    db_user: User,
+    session: AsyncSession,
+):
+    if db_user.role not in FULL_ADMIN_ROLES:
         await state.clear()
         return
 
@@ -167,14 +182,21 @@ async def process_access_user_id(message: Message, state, db_user: User, session
     await state.update_data(target_user_id=target.id, target_telegram_id=telegram_id)
     await state.set_state(AdminState.waiting_for_user_id)
     await message.answer(
-        f"{Emojis.WARN} Подтвердить действие <b>{action}</b> для пользователя <code>{telegram_id}</code>?",
+        f"{Emojis.WARN} Подтвердить действие <b>{action}</b> для пользователя "
+        f"<code>{telegram_id}</code>?",
         reply_markup=get_access_confirmation_kb(),
     )
 
+
 @router.callback_query(AdminCB.filter(F.action == "confirm_access"))
-async def cb_confirm_access(query: CallbackQuery, state, db_user: User, session: AsyncSession, bot: Bot):
-    is_owner = query.from_user.id == config.OWNER_ID
-    if db_user.role not in FULL_ADMIN_ROLES and not is_owner:
+async def cb_confirm_access(
+    query: CallbackQuery,
+    state,
+    db_user: User,
+    session: AsyncSession,
+    bot: Bot,
+):
+    if db_user.role not in FULL_ADMIN_ROLES:
         await query.answer("Нужны права администратора", show_alert=True)
         return
 
@@ -191,12 +213,13 @@ async def cb_confirm_access(query: CallbackQuery, state, db_user: User, session:
         return
 
     notice = Texts.ACCESS_REMOVED_NOTICE
-    markup = None # Можно вернуть get_main_menu_kb(), если нужно
+    markup = get_main_menu_kb(db_user.role)
     if action == "ban":
         target.is_banned = True
         if not (await session.execute(select(Ban).where(Ban.user_id == target.id))).scalar_one_or_none():
             session.add(Ban(user_id=target.id, admin_id=db_user.id, reason="Выдан администратором"))
         notice = Texts.BANNED_SCREEN
+        markup = None
     elif action == "unban":
         target.is_banned = False
         await session.execute(delete(Ban).where(Ban.user_id == target.id))
@@ -224,12 +247,14 @@ async def cb_confirm_access(query: CallbackQuery, state, db_user: User, session:
     if isinstance(query.message, Message):
         await query.message.edit_reply_markup(reply_markup=None)
 
+
 @router.callback_query(AdminCB.filter(F.action == "cancel_access"))
 async def cb_cancel_access(query: CallbackQuery, state):
     await state.clear()
     await query.answer("Действие отменено")
     if isinstance(query.message, Message):
         await query.message.edit_reply_markup(reply_markup=None)
+
 
 async def user_is_reachable(bot: Bot, telegram_id: int) -> bool:
     try:
@@ -239,10 +264,10 @@ async def user_is_reachable(bot: Bot, telegram_id: int) -> bool:
     except Exception:
         return False
 
+
 @router.callback_query(AdminCB.filter(F.action == "users"))
 async def cb_admin_users(query: CallbackQuery, session: AsyncSession, db_user: User, bot: Bot):
-    is_owner = query.from_user.id == config.OWNER_ID
-    if db_user.role not in STAFF_ROLES and not is_owner:
+    if db_user.role not in STAFF_ROLES:
         return
 
     result = await session.execute(select(User).order_by(User.id.desc()).limit(20))
@@ -269,10 +294,10 @@ async def cb_admin_users(query: CallbackQuery, session: AsyncSession, db_user: U
 
     await message.edit_text(text=text, reply_markup=builder.as_markup())
 
+
 @router.callback_query(AdminCB.filter(F.action == "tickets"))
 async def cb_admin_tickets(query: CallbackQuery, session: AsyncSession, db_user: User):
-    is_owner = query.from_user.id == config.OWNER_ID
-    if db_user.role not in ["admin", "owner", "moderator"] and not is_owner:
+    if db_user.role not in ["admin", "owner", "moderator"]:
         return
 
     result = await session.execute(select(SupportTicket).order_by(SupportTicket.created_at.desc()).limit(20))
@@ -312,8 +337,7 @@ async def cb_admin_tickets(query: CallbackQuery, session: AsyncSession, db_user:
 
 @router.callback_query(AdminCB.filter(F.action == "logs"))
 async def cb_admin_logs(query: CallbackQuery, session: AsyncSession, db_user: User):
-    is_owner = query.from_user.id == config.OWNER_ID
-    if db_user.role not in ["admin", "owner", "moderator"] and not is_owner:
+    if db_user.role not in ["admin", "owner", "moderator"]:
         return
 
     result = await session.execute(select(Log).order_by(Log.created_at.desc()).limit(10))
