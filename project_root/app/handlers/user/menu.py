@@ -17,14 +17,14 @@ from app.config import config
 router = Router()
 
 @router.callback_query(MenuCB.filter(F.action == "main"))
-async def cb_main_menu(query: CallbackQuery, state: FSMContext):
+async def cb_main_menu(query: CallbackQuery, state: FSMContext, db_user: User):
     await state.clear()
     message = query.message
     if not isinstance(message, Message):
         return
     await message.edit_text(
         text=Texts.MAIN_MENU,
-        reply_markup=get_main_menu_kb()
+        reply_markup=get_main_menu_kb(db_user.role)
     )
 
 @router.callback_query(MenuCB.filter(F.action == "link"))
